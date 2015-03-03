@@ -1,5 +1,13 @@
 #!/usr/bin/python
 
+# git clone soma:/src/code/vSPC.py.git
+
+#
+# Originally from:
+#     git clone git://git.code.sf.net/p/vspcpy/code vSPC.py
+#     http://sourceforge.net/p/vspcpy/home/Home/
+#
+
 # Copyright 2011 Isilon Systems LLC. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification, are
@@ -51,6 +59,7 @@ import os
 import pickle
 import select
 import socket
+import ssl
 import struct
 import sys
 import threading
@@ -472,11 +481,11 @@ class VMTelnetServer(TelnetServer):
                               % (ord(subcmd), hexdump(data)))
             self._send_vmware(UNKNOWN_SUBOPTION_RCVD_2 + subcmd)
 
-def openport(port):
+def openport(port, addr = ""):
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.setblocking(0)
 	sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);
-        sock.bind(("", port))
+        sock.bind((addr, port))
 	sock.listen(LISTEN_BACKLOG)
 	return sock
 
@@ -737,12 +746,18 @@ class vSPC(Selector, VMExtHandler):
             TelnetServer.__init__(self, sock, server_opts, client_opts)
             self.uuid = None
 
-    def __init__(self, proxy_port, admin_port,
+    def __init__(self, proxy_addr, proxy_port, admin_addr, admin_port,
+                 use_ssl, ssl_cert_file, ssl_key_file,
                  vm_port_start, vm_expire_time, backend):
         Selector.__init__(self)
 
+        self.proxy_addr = proxy_addr
         self.proxy_port = proxy_port
+        self.admin_addr = admin_addr
         self.admin_port = admin_port
+        self.use_ssl = use_ssl
+        self.ssl_cert_file = ssl_cert_file
+        self.ssl_key_file = ssl_key_file
         self.vm_port_next = vm_port_start
         self.vm_expire_time = vm_expire_time
         self.backend = backend
@@ -760,8 +775,11 @@ class vSPC(Selector, VMExtHandler):
 
     def new_vm_connection(self, listener):
         sock = listener.accept()[0]
-        sock.setblocking(0)
-        sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+        if self.use_ssl:
+            sock = ssl.wrap_socket(sock, server_side = True, keyfile = self.ssl_key_file, certfile = self.ssl_cert_file, ssl_version = ssl.PROTOCOL_TLSv1)
+        else:
+            sock.setblocking(0)
+            sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
         vt = VMTelnetServer(sock, handler = self)
         self.add_reader(vt, self.new_vm_data)
 
@@ -1018,7 +1036,7 @@ class vSPC(Selector, VMExtHandler):
         assert not self.ports.has_key(vm.port)
         self.ports[vm.port] = vm.uuid
 
-        vm.listener = openport(vm.port)
+        vm.listener = openport(vm.port, self.admin_addr)
         self.add_reader(vm, self.new_client_connection)
 
     def create_old_vms(self, vms):
@@ -1032,8 +1050,8 @@ class vSPC(Selector, VMExtHandler):
 
         self.create_old_vms(self.backend.get_observed_vms())
 
-        self.add_reader(openport(self.proxy_port), self.new_vm_connection)
-        self.add_reader(openport(self.admin_port), self.new_admin_connection)
+        self.add_reader(openport(self.proxy_port, self.proxy_addr), self.new_vm_connection)
+        self.add_reader(openport(self.admin_port, self.admin_addr), self.new_admin_connection)
         self.run_forever()
 
 def do_query(host, port):
@@ -1184,9 +1202,16 @@ if __name__ == '__main__':
     import getopt
 
     proxy_port = PROXY_PORT
+    proxy_addr = ''
     admin_port = ADMIN_PORT
+    admin_addr = ''
     vm_port_start = VM_PORT_START
     vm_expire_time = VM_EXPIRE_TIME
+    use_ssl = False
+    ssl_cert_file = ''
+    ssl_key_file = ''
+    ssl_cert = ''
+    ssl_key = ''
     debug = False
     syslog = True
     fork = True
@@ -1201,7 +1226,8 @@ if __name__ == '__main__':
                                         'server', 'stdout', 'no-fork',
                                         'vm-expire-time=',
                                         'backend=', 'backend-args=',
-                                        'backend-help',
+                                        'backend-help', 'ssl',
+                                        'ssl-cert=', 'ssl-key=',
                                         'persist-file='])
         for o,a in opts:
             if o in ['-h', '--help']:
@@ -1212,9 +1238,17 @@ if __name__ == '__main__':
                 syslog = False
                 fork = False
             elif o in ['-a', '--admin-port']:
-                admin_port = int(a)
+                if ':' in a:
+                    admin_addr, admin_port = a.split(':')
+                    admin_port = int(admin_port)
+                else:
+                    admin_port = int(a)
             elif o in ['-p', '--proxy-port']:
-                proxy_port = int(a)
+                if ':' in a:
+                    proxy_addr, proxy_port = a.split(':')
+                    proxy_port = int(proxy_port)
+                else:
+                    proxy_port = int(a)
             elif o in ['-r', '--port-range-start']:
                 vm_port_start = int(a)
             elif o in ['-s', '--server']:
@@ -1232,6 +1266,12 @@ if __name__ == '__main__':
             elif o in ['--backend-help']:
                 help(vSPCBackendMemory)
                 sys.exit(0)
+            elif o in ['--ssl']:
+                use_ssl = True
+            elif o in ['--ssl-cert']:
+                ssl_cert_file = a
+            elif o in ['--ssl-key']:
+                ssl_key_file = a
             elif o in ['-f', '--persist-file']:
                 import pipes
                 backend_type_name = 'File'
@@ -1240,6 +1280,11 @@ if __name__ == '__main__':
                 assert False, 'unhandled option'
     except getopt.GetoptError, err:
         print str(err)
+        usage()
+        sys.exit(2)
+
+    if use_ssl and (not ssl_cert_file or not ssl_key_file):
+        print "Must specify --ssl-cert and --ssl-key with --ssl"
         usage()
         sys.exit(2)
 
@@ -1273,7 +1318,7 @@ if __name__ == '__main__':
     try:
         backend.start()
 
-        vSPC(proxy_port, admin_port, vm_port_start, vm_expire_time, backend).run()
+        vSPC(proxy_addr, proxy_port, admin_addr, admin_port, use_ssl, ssl_cert_file, ssl_key_file, vm_port_start, vm_expire_time, backend).run()
     except KeyboardInterrupt:
         logging.info("Shutdown requested on keyboard, exiting")
         sys.exit(0)

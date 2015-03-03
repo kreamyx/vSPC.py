@@ -1129,7 +1129,8 @@ Query (without --server): Connect to the --admin-port (default %s) on
 
 Server (with --server):
   Additional options:
-    [-p|--proxy-port P] [-r|--port-range-start P] [--vm-expire-time seconds]
+    [-a|--admin-port [host]:port] [-p|--proxy-port [host]:port]
+    [-r|--port-range-start P] [--vm-expire-time seconds]
     [--backend Backend] [--backend-args 'arg string'] [--backend-help]
     [-f|--persist-file file]
     [--stdout] [--no-fork]
@@ -1293,8 +1294,11 @@ if __name__ == '__main__':
             print "Expected 1 argument, found %d" % len(args)
             usage()
             sys.exit(2)
-
-        sys.exit(do_query(args[0], admin_port))
+        if ':' in args[0]:
+            arg_host, arg_port = args[0].split(':')
+            sys.exit(do_query(arg_host, int(arg_port)))
+        else:
+            sys.exit(do_query(args[0], admin_port))
 
     # Server mode
 

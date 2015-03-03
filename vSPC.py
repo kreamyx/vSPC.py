@@ -69,10 +69,10 @@ import Queue
 from telnetlib import *
 from telnetlib import IAC,DO,DONT,WILL,WONT,BINARY,ECHO,SGA,SB,SE,NOOPT,theNULL
 
-# Default for --proxy-port, the port to send VMs to.
+# Default for --proxy, the port to send VMs to.
 PROXY_PORT = 13370
 
-# Default for --admin-port, the port to hit vSPC-query with
+# Default for --admin, the port to hit vSPC-query with
 ADMIN_PORT = 13371
 
 # Default for --port-range-start, start of port range to assign VMs.
@@ -1129,7 +1129,7 @@ Query (without --server): Connect to the --admin-port (default %s) on
 
 Server (with --server):
   Additional options:
-    [-a|--admin-port [host]:port] [-p|--proxy-port [host]:port]
+    [-a|--admin [host]:port] [-p|--proxy [host]:port]
     [-r|--port-range-start P] [--vm-expire-time seconds]
     [--backend Backend] [--backend-args 'arg string'] [--backend-help]
     [-f|--persist-file file]
@@ -1183,8 +1183,8 @@ Server (with --server):
   See --backend-help for programming details.
 
   Explanation of server options:
-    -a|--admin-port: The port to listen/use for queries (default %s)
-    -p|--proxy-port: The proxy port to listen on (default %s)
+    -a|--admin: The port to listen/use for queries (default %s)
+    -p|--proxy: The proxy port to listen on for VMware connections (default %s)
     -r|--port-range-start: What port to start port allocations from (default %s)
     --vm-expire-time: How long to wait before expiring a mapping with no connections
     -f|--persist-file: DBM file prefix to persist mappings to (.dat/.dir may follow)
@@ -1222,8 +1222,8 @@ if __name__ == '__main__':
 
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], 'a:f:hdp:r:s',
-                                       ['help', 'debug', 'admin-port=',
-                                        'proxy-port=', 'port-range-start=',
+                                       ['help', 'debug', 'admin=',
+                                        'proxy=', 'port-range-start=',
                                         'server', 'stdout', 'no-fork',
                                         'vm-expire-time=',
                                         'backend=', 'backend-args=',
@@ -1238,13 +1238,13 @@ if __name__ == '__main__':
                 debug = True
                 syslog = False
                 fork = False
-            elif o in ['-a', '--admin-port']:
+            elif o in ['-a', '--admin']:
                 if ':' in a:
                     admin_addr, admin_port = a.split(':')
                     admin_port = int(admin_port)
                 else:
                     admin_port = int(a)
-            elif o in ['-p', '--proxy-port']:
+            elif o in ['-p', '--proxy']:
                 if ':' in a:
                     proxy_addr, proxy_port = a.split(':')
                     proxy_port = int(proxy_port)

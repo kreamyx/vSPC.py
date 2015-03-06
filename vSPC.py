@@ -70,10 +70,10 @@ from telnetlib import *
 from telnetlib import IAC,DO,DONT,WILL,WONT,BINARY,ECHO,SGA,SB,SE,NOOPT,theNULL
 
 # Default for --proxy, the port to send VMs to.
-PROXY_PORT = 13370
+PROXY_PORT = 6779
 
 # Default for --admin, the port to hit vSPC-query with
-ADMIN_PORT = 13371
+ADMIN_PORT = 6780
 
 # Default for --port-range-start, start of port range to assign VMs.
 # Ports may be reallocated within the range, based on active connections

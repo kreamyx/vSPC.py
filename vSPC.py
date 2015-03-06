@@ -481,11 +481,13 @@ class VMTelnetServer(TelnetServer):
                               % (ord(subcmd), hexdump(data)))
             self._send_vmware(UNKNOWN_SUBOPTION_RCVD_2 + subcmd)
 
-def openport(port, addr = ""):
+def openport(port, iface="", use_ssl=False, ssl_cert=None, ssl_key=None):
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if use_ssl:
+            sock = ssl.wrap_socket(sock, keyfile=ssl_key, certfile=ssl_cert)
 	sock.setblocking(0)
 	sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);
-        sock.bind((addr, port))
+        sock.bind((iface, port))
 	sock.listen(LISTEN_BACKLOG)
 	return sock
 
@@ -712,9 +714,11 @@ class vSPCBackendFile(vSPCBackendMemory):
 
     def vm_hook(self, uuid, name, port):
         self.shelf[uuid] = { P_UUID : uuid, P_NAME : name, P_PORT : port }
+        self.shelf.sync()
 
     def vm_del_hook(self, uuid):
         del self.shelf[uuid]
+        self.shelf.sync()
 
     def load_vms(self):
         vms = {}
@@ -746,14 +750,14 @@ class vSPC(Selector, VMExtHandler):
             TelnetServer.__init__(self, sock, server_opts, client_opts)
             self.uuid = None
 
-    def __init__(self, proxy_addr, proxy_port, admin_addr, admin_port,
+    def __init__(self, proxy_iface, proxy_port, admin_iface, admin_port,
                  use_ssl, ssl_cert_file, ssl_key_file,
                  vm_port_start, vm_expire_time, backend):
         Selector.__init__(self)
 
-        self.proxy_addr = proxy_addr
+        self.proxy_iface = proxy_iface
         self.proxy_port = proxy_port
-        self.admin_addr = admin_addr
+        self.admin_iface = admin_iface
         self.admin_port = admin_port
         self.use_ssl = use_ssl
         self.ssl_cert_file = ssl_cert_file
@@ -774,12 +778,12 @@ class vSPC(Selector, VMExtHandler):
             self.del_writer(ts)
 
     def new_vm_connection(self, listener):
-        sock = listener.accept()[0]
-        if self.use_ssl:
-            sock = ssl.wrap_socket(sock, server_side = True, keyfile = self.ssl_key_file, certfile = self.ssl_cert_file, ssl_version = ssl.PROTOCOL_TLSv1)
-        else:
-            sock.setblocking(0)
-            sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+        try:
+            sock = listener.accept()[0]
+        except ssl.SSLError:
+            return
+        sock.setblocking(0)
+        sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
         vt = VMTelnetServer(sock, handler = self)
         self.add_reader(vt, self.new_vm_data)
 
@@ -805,12 +809,13 @@ class vSPC(Selector, VMExtHandler):
         else:
             logging.debug('unidentified VM socket closed')
         self.del_all(vt)
+        vt.close()
 
     def new_vm_data(self, vt):
         neg_done = False
         try:
             neg_done = vt.negotiation_done()
-        except (EOFError, IOError, socket.error):
+        except (EOFError, IOError, socket.error, ssl.SSLError):
             self.abort_vm_connection(vt)
 
         if not neg_done:
@@ -823,7 +828,7 @@ class vSPC(Selector, VMExtHandler):
         s = None
         try:
             s = vt.read_very_lazy()
-        except (EOFError, IOError, socket.error):
+        except (EOFError, IOError, socket.error, ssl.SSLError):
             self.abort_vm_connection(vt)
 
         if not s: # May only be option data, or exception
@@ -838,7 +843,7 @@ class vSPC(Selector, VMExtHandler):
         for cl in self.vms[vt.uuid].clients:
             try:
                 self.send_buffered(cl, s)
-            except (EOFError, IOError, socket.error), e:
+            except (EOFError, IOError, socket.error, ssl.SSLError), e:
                 logging.debug('cl.socket send error: %s' % (str(e)))
 
     def abort_client_connection(self, client):
@@ -852,7 +857,7 @@ class vSPC(Selector, VMExtHandler):
         neg_done = False
         try:
             neg_done = client.negotiation_done()
-        except (EOFError, IOError, socket.error):
+        except (EOFError, IOError, socket.error, ssl.SSLError):
             self.abort_client_connection(client)
 
         if not neg_done:
@@ -865,7 +870,7 @@ class vSPC(Selector, VMExtHandler):
         s = None
         try:
             s = client.read_very_lazy()
-        except (EOFError, IOError, socket.error):
+        except (EOFError, IOError, socket.error, ssl.SSLError):
             self.abort_client_connection(client)
 
         if not s: # May only be option data, or exception
@@ -876,7 +881,7 @@ class vSPC(Selector, VMExtHandler):
         for vt in self.vms[client.uuid].vts:
             try:
                 self.send_buffered(vt, s)
-            except (EOFError, IOError, socket.error), e:
+            except (EOFError, IOError, socket.error, ssl.SSLError), e:
                 logging.debug('cl.socket send error: %s' % (str(e)))
 
     def new_vm(self, uuid, name, port = None, vts = None):
@@ -1036,7 +1041,7 @@ class vSPC(Selector, VMExtHandler):
         assert not self.ports.has_key(vm.port)
         self.ports[vm.port] = vm.uuid
 
-        vm.listener = openport(vm.port, self.admin_addr)
+        vm.listener = openport(vm.port, self.admin_iface)
         self.add_reader(vm, self.new_client_connection)
 
     def create_old_vms(self, vms):
@@ -1050,8 +1055,8 @@ class vSPC(Selector, VMExtHandler):
 
         self.create_old_vms(self.backend.get_observed_vms())
 
-        self.add_reader(openport(self.proxy_port, self.proxy_addr), self.new_vm_connection)
-        self.add_reader(openport(self.admin_port, self.admin_addr), self.new_admin_connection)
+        self.add_reader(openport(self.proxy_port, self.proxy_iface, self.use_ssl, self.ssl_cert_file, self.ssl_key_file), self.new_vm_connection)
+        self.add_reader(openport(self.admin_port, self.admin_iface), self.new_admin_connection)
         self.run_forever()
 
 def do_query(host, port):
@@ -1203,16 +1208,14 @@ if __name__ == '__main__':
     import getopt
 
     proxy_port = PROXY_PORT
-    proxy_addr = ''
+    proxy_iface = ''
     admin_port = ADMIN_PORT
-    admin_addr = ''
+    admin_iface = ''
     vm_port_start = VM_PORT_START
     vm_expire_time = VM_EXPIRE_TIME
     use_ssl = False
-    ssl_cert_file = ''
-    ssl_key_file = ''
-    ssl_cert = ''
-    ssl_key = ''
+    ssl_cert_file = None
+    ssl_key_file = None
     debug = False
     syslog = True
     fork = True
@@ -1240,13 +1243,13 @@ if __name__ == '__main__':
                 fork = False
             elif o in ['-a', '--admin']:
                 if ':' in a:
-                    admin_addr, admin_port = a.split(':')
+                    admin_iface, admin_port = a.split(':')
                     admin_port = int(admin_port)
                 else:
                     admin_port = int(a)
             elif o in ['-p', '--proxy']:
                 if ':' in a:
-                    proxy_addr, proxy_port = a.split(':')
+                    proxy_iface, proxy_port = a.split(':')
                     proxy_port = int(proxy_port)
                 else:
                     proxy_port = int(a)
@@ -1322,7 +1325,7 @@ if __name__ == '__main__':
     try:
         backend.start()
 
-        vSPC(proxy_addr, proxy_port, admin_addr, admin_port, use_ssl, ssl_cert_file, ssl_key_file, vm_port_start, vm_expire_time, backend).run()
+        vSPC(proxy_iface, proxy_port, admin_iface, admin_port, use_ssl, ssl_cert_file, ssl_key_file, vm_port_start, vm_expire_time, backend).run()
     except KeyboardInterrupt:
         logging.info("Shutdown requested on keyboard, exiting")
         sys.exit(0)

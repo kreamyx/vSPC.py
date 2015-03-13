@@ -1,11 +1,15 @@
 #!/usr/bin/python
 
-# git clone soma:/src/code/vSPC.py.git
+# git clone ssh://soma/src/code/vSPC.py.git
 
 #
 # Originally from:
 #     git clone git://git.code.sf.net/p/vspcpy/code vSPC.py
 #     http://sourceforge.net/p/vspcpy/home/Home/
+#
+# There is also a (massively reworked) fork of vSPC.py available at:
+#     git clone https://github.com/isnotajoke/vSPC.py.git
+# from which a number of bugfixes were backported.
 #
 
 # Copyright 2011 Isilon Systems LLC. All rights reserved.

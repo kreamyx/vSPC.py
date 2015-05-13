@@ -808,8 +808,11 @@ class vSPC(Selector, VMExtHandler):
     def abort_vm_connection(self, vt):
         if vt.uuid:
             logging.debug('uuid %s VM socket closed' % vt.uuid)
-            self.vms[vt.uuid].vts.remove(vt)
-            self.stamp_orphan(self.vms[vt.uuid])
+            try:
+                self.vms[vt.uuid].vts.remove(vt)
+                self.stamp_orphan(self.vms[vt.uuid])
+            except KeyError:
+                pass
         else:
             logging.debug('unidentified VM socket closed')
         self.del_all(vt)

@@ -327,13 +327,12 @@ class TelnetServer(FixedTelnet):
             logging.debug("cmd %d %s" % (ord(cmd), opt))
 
     def process_available(self):
-        """Process all data, but don't take anything off the cooked queue.
+        """Process some data, but don't take anything off the cooked queue.
         Do not block. Use for buffering data during options negotation.
         """
-        self.process_rawq()
-        while not self.eof and self.sock_avail():
+        if self.sock_avail():
             self.fill_rawq()
-            self.process_rawq()  
+        self.process_rawq()
 
     def negotiation_done(self):
         self.process_available()
@@ -837,6 +836,7 @@ class vSPC(Selector, VMExtHandler):
             s = vt.read_very_lazy()
         except (EOFError, IOError, socket.error, ssl.SSLError):
             self.abort_vm_connection(vt)
+            return
 
         if not s: # May only be option data, or exception
             return

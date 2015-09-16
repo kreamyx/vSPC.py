@@ -330,8 +330,21 @@ class TelnetServer(FixedTelnet):
         """Process some data, but don't take anything off the cooked queue.
         Do not block. Use for buffering data during options negotation.
         """
-        if self.sock_avail():
+        while not self.eof and self.sock_avail() and len(self.cookedq) < 1024:
             self.fill_rawq()
+            self.process_rawq()
+
+        # SSL can have buffered data even though the socket doesn't have
+        # any pending read available.  We don't know if we are SSL or not
+        # so we hack the check for the pending() method. Even this isn't really
+        # right - we want to fill the rawq with just the pending amount - but
+        # it's better than before. Polling I/O daemons on SSL are harder than
+        # just wrapping the socket.
+
+        if "pending" in dir(self.sock):
+            while self.sock.pending():
+                self.fill_rawq()
+
         self.process_rawq()
 
     def negotiation_done(self):
@@ -345,11 +358,6 @@ class TelnetServer(FixedTelnet):
                 logging.debug("still waiting for %s" % desc)
 
         return not self.unacked
-
-    def read_after_negotiate(self):
-        if not self.negotiation_done():
-            return ''
-        return self.read_very_lazy()
 
     def send_buffered(self, s = ''):
         self.send_buffer += s
@@ -523,7 +531,7 @@ class Selector:
 
     def run_once(self, timeout = None):
         (readers, writers, exceptions) = \
-            select.select(self.read_handlers.keys(), [], [], timeout)
+            select.select(self.read_handlers.keys(), self.write_handlers.keys(), [], timeout)
         for reader in readers:
             self.read_handlers[reader](reader)
         for writer in writers:

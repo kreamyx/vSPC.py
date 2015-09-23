@@ -416,25 +416,27 @@ class VMTelnetServer(TelnetServer):
         cookie = data + struct.pack("i", hash(self) & 0xFFFFFFFF)
 
         if self.handler.handle_vmotion_begin(self, cookie):
-            logging.debug("vMotion initiated: %s" % hexdump(cookie))
+            logging.info("vMotion initiated for %s: %s" % (self.name, hexdump(cookie)))
             self._send_vmware(VMOTION_GOAHEAD + cookie)
         else:
-            logging.debug("vMotion denied: %s" % hexdump(cookie))
+            logging.info("vMotion denied for %s: %s" % (self.name, hexdump(cookie)))
             self._send_vmware(VMOTION_NOTNOW + cookie)
 
     def _handle_vmotion_peer(self, cookie):
         if self.handler.handle_vmotion_peer(self, cookie):
-            logging.debug("vMotion peer: %s" % hexdump(cookie))
+            logging.info("vMotion peer for %s: %s" % (self.name, hexdump(cookie)))
             self._send_vmware(VMOTION_PEER_OK + cookie)
         else:
             # There's no clear spec on rejecting this
-            logging.debug("vMotion peer rejected: %s" % hexdump(cookie))
+            logging.info("vMotion peer rejected for %s: %s" % (self.name, hexdump(cookie)))
             self._send_vmware(UNKNOWN_SUBOPTION_RCVD_2 + VMOTION_PEER)
 
     def _handle_vmotion_complete(self, data):
+        logging.info("vMotion complete for %s" % self.name)
         self.handler.handle_vmotion_complete(self)
 
     def _handle_vmotion_abort(self, data):
+        logging.info("vMotion abort for %s" % self.name)
         self.handler.handle_vmotion_abort(self)
 
     def _handle_vc_uuid(self, data):
@@ -1152,7 +1154,7 @@ Server (with --server):
     [-a|--admin [host]:port] [-p|--proxy [host]:port]
     [-r|--port-range-start P] [--vm-expire-time seconds]
     [--backend Backend] [--backend-args 'arg string'] [--backend-help]
-    [-f|--persist-file file]
+    [-f|--persist-file file] [-v|--verbose]
     [--stdout] [--no-fork]
 
   Start Virtual Serial Port Concentrator. By default, vSPC listens on
@@ -1239,8 +1241,8 @@ if __name__ == '__main__':
     backend_args = ''
 
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], 'a:f:hdp:r:s',
-                                       ['help', 'debug', 'admin=',
+        opts, args = getopt.gnu_getopt(sys.argv[1:], 'a:f:hdp:r:sv',
+                                       ['help', 'debug', 'verbose', 'admin=',
                                         'proxy=', 'port-range-start=',
                                         'server', 'stdout', 'no-fork',
                                         'vm-expire-time=',
@@ -1256,6 +1258,8 @@ if __name__ == '__main__':
                 debug = True
                 syslog = False
                 fork = False
+            elif o in ['-v', '--verbose']:
+                debug = True
             elif o in ['-a', '--admin']:
                 if ':' in a:
                     admin_iface, admin_port = a.split(':')

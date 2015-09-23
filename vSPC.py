@@ -424,11 +424,11 @@ class VMTelnetServer(TelnetServer):
 
     def _handle_vmotion_peer(self, cookie):
         if self.handler.handle_vmotion_peer(self, cookie):
-            logging.info("vMotion peer for %s: %s" % (self.name, hexdump(cookie)))
+            logging.info("vMotion peer: %s" % hexdump(cookie))
             self._send_vmware(VMOTION_PEER_OK + cookie)
         else:
             # There's no clear spec on rejecting this
-            logging.info("vMotion peer rejected for %s: %s" % (self.name, hexdump(cookie)))
+            logging.info("vMotion peer rejected: %s" % hexdump(cookie))
             self._send_vmware(UNKNOWN_SUBOPTION_RCVD_2 + VMOTION_PEER)
 
     def _handle_vmotion_complete(self, data):

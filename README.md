@@ -12,7 +12,7 @@ It was forked from `git://git.code.sf.net/p/vspcpy/code` in late 2014,
 at commit 80c3a4b228562351b0eead91a1d99d41aa850fc1 from Sep 6 2011.
 
 You can find the original README at 
-[http://sourceforge.net/p/vspcpy/home/Home/](SourceForge).
+[vspcpy on SourceForge](http://sourceforge.net/p/vspcpy/home/Home/).
 
 Given that sourceforge is a rather dubious site now at best I suggest some
 caution when visiting it.

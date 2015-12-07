@@ -490,7 +490,7 @@ class VMTelnetServer(TelnetServer):
                 self.unacked.remove((VMWARE_EXT, subcmd))
 
         if not handled:
-            logging.debug('VMware command %d (data %s) not handled' \
+            logging.info('VMware command %d (data %s) not handled' \
                               % (ord(subcmd), hexdump(data)))
             self._send_vmware(UNKNOWN_SUBOPTION_RCVD_2 + subcmd)
 
@@ -682,7 +682,7 @@ class vSPCBackendMemory:
                 pickle.dump(Exception('No common version'), sockfile)
             sockfile.flush()
         except Exception, e:
-            logging.debug('handle_query_socket exception: %s' % str(e))
+            logging.info('handle_query_socket exception: %s' % str(e))
 
 class vSPCBackendFile(vSPCBackendMemory):
     def __init__(self):
@@ -811,19 +811,19 @@ class vSPC(Selector, VMExtHandler):
         self.add_reader(client, self.new_client_data)
         vm.clients.append(client)
 
-        logging.debug('uuid %s new client, %d active clients'
+        logging.info('uuid %s new client, %d active clients'
                       % (client.uuid, len(vm.clients)))
 
     def abort_vm_connection(self, vt):
         if vt.uuid:
-            logging.debug('uuid %s VM socket closed' % vt.uuid)
+            logging.info('uuid %s VM socket closed' % vt.uuid)
             try:
                 self.vms[vt.uuid].vts.remove(vt)
                 self.stamp_orphan(self.vms[vt.uuid])
             except KeyError:
                 pass
         else:
-            logging.debug('unidentified VM socket closed')
+            logging.info('unidentified VM socket closed')
         self.del_all(vt)
         vt.close()
 
@@ -861,10 +861,10 @@ class vSPC(Selector, VMExtHandler):
             try:
                 self.send_buffered(cl, s)
             except (EOFError, IOError, socket.error, ssl.SSLError), e:
-                logging.debug('cl.socket send error: %s' % (str(e)))
+                logging.info('cl.socket send error: %s' % (str(e)))
 
     def abort_client_connection(self, client):
-        logging.debug('uuid %s client socket closed, %d active clients' %
+        logging.info('uuid %s client socket closed, %d active clients' %
                       (client.uuid, len(self.vms[client.uuid].clients)-1))
         self.vms[client.uuid].clients.remove(client)
         self.stamp_orphan(self.vms[client.uuid])
@@ -899,7 +899,7 @@ class vSPC(Selector, VMExtHandler):
             try:
                 self.send_buffered(vt, s)
             except (EOFError, IOError, socket.error, ssl.SSLError), e:
-                logging.debug('cl.socket send error: %s' % (str(e)))
+                logging.info('cl.socket send error: %s' % (str(e)))
 
     def new_vm(self, uuid, name, port = None, vts = None):
         vm = self.Vm(uuid = uuid, name = name, vts = vts)
@@ -911,7 +911,7 @@ class vSPC(Selector, VMExtHandler):
         if not port:
             self.backend.notify_vm(vm.uuid, vm.name, vm.port)
 
-        logging.debug('%s:%s listening on port %d' % 
+        logging.info('%s:%s listening on port %d' % 
                       (vm.uuid, repr(vm.name), vm.port))
 
         # The clock is always ticking
@@ -937,7 +937,7 @@ class vSPC(Selector, VMExtHandler):
         vm = self.vms[vt.uuid]
         vm.vts.append(vt)
 
-        logging.debug('uuid %s VM reconnect, %d active' %
+        logging.info('uuid %s VM reconnect, %d active' %
                       (vm.uuid, len(vm.vts)))
 
     def handle_vm_name(self, vt):
@@ -966,17 +966,17 @@ class vSPC(Selector, VMExtHandler):
 
     def handle_vmotion_peer(self, vt, data):
         if not self.vmotions.has_key(data):
-            logging.debug('peer cookie %s doesn\'t exist' % hexdump(data))
+            logging.info('peer cookie %s doesn\'t exist' % hexdump(data))
             return False
 
-        logging.debug('peer cookie %s maps to uuid %s' %
+        logging.info('peer cookie %s maps to uuid %s' %
                       (hexdump(data), self.vmotions[data]))
 
         peer_uuid = self.vmotions[data]
         if vt.uuid:
             vm = self.vms[vt.uuid]
             if vm.uuid != peer_uuid:
-                logging.debug('peer uuid %s != other uuid %s' % hexdump(data))
+                logging.info('peer uuid %s != other uuid %s' % hexdump(data))
                 return False
             return True # vt already in place
         else:
@@ -987,13 +987,13 @@ class vSPC(Selector, VMExtHandler):
         return True
 
     def handle_vmotion_complete(self, vt):
-        logging.debug('uuid %s vmotion complete' % vt.uuid)
+        logging.info('uuid %s vmotion complete' % vt.uuid)
         vm = self.vms[vt.uuid]
         del self.vmotions[vm.vmotion]
         vm.vmotion = None
 
     def handle_vmotion_abort(self, vt):
-        logging.debug('uuid %s vmotion abort' % vt.uuid)
+        logging.info('uuid %s vmotion abort' % vt.uuid)
         vm = self.vms[vt.uuid]
         if vm.vmotion:
             del self.vmotions[vm.vmotion]
@@ -1028,7 +1028,7 @@ class vSPC(Selector, VMExtHandler):
             elif vm.last_time + self.vm_expire_time > t:
                 continue
 
-            logging.debug('expired VM with uuid %s, port %d' 
+            logging.info('expired VM with uuid %s, port %d' 
                           % (uuid, vm.port))
             self.backend.notify_vm_del(vm.uuid)
 
@@ -1336,7 +1336,10 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
     if syslog:
         from logging.handlers import SysLogHandler
-        logger.addHandler(SysLogHandler(address='/dev/log'))
+        handler = SysLogHandler(address='/dev/log')
+        formatter = logging.Formatter('%(filename)s[%(process)d]: %(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
     if fork:
         daemonize()

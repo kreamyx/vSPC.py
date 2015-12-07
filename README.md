@@ -32,3 +32,28 @@ Note that there are several significantly reworked versions of vSPY.py where the
 1. Fix a serious bug where VMs wouldn't migrate if the generated secret
    contained an IAC (\0xff) character.
 
+
+## Using It
+
+Start the daemon somewhere in server mode.  There is no security or
+authentication on the client connections, so I strongly suggest you
+start the client ("admin") listeners exclusively on 127.0.0.1.
+
+E.g.,
+    vSPC.py --server --proxy :6779 --admin 127.0.0.1:6780
+
+Or with SSL:
+    vSPC.py --server --proxy :6779 --admin 127.0.0.1:6780 \
+        --ssl \
+        --ssl-cert /etc/ssl/certs/my.cert \
+        --ssl-key /etc/ssl/private/my.key
+
+On your VMs, add a serial port device configured as "Use Network" with
+settings like this:
+
+* Status: Connect At Power On
+* Direction: Server
+* Port URI: vSPC.py
+* Use Virtual Serial Port Concentrator
+* vSPC URI: telnet://myhost.example.org:6779
+* use 'telnets://' for SSL

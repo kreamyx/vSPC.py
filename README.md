@@ -8,12 +8,11 @@ This is a fork of vSPC.py by Zach Loafman / Isilon Systems.
 
 ## Origins
 
-It was forked from [git://git.code.sf.net/p/vspcpy/code] in late 2014,
+It was forked from `git://git.code.sf.net/p/vspcpy/code` in late 2014,
 at commit 80c3a4b228562351b0eead91a1d99d41aa850fc1 from Sep 6 2011.
 
 You can find the original README at 
-
-[http://sourceforge.net/p/vspcpy/home/Home/]
+[http://sourceforge.net/p/vspcpy/home/Home/](SourceForge).
 
 Given that sourceforge is a rather dubious site now at best I suggest some
 caution when visiting it.

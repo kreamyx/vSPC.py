@@ -1157,6 +1157,7 @@ Server (with --server):
     [--backend Backend] [--backend-args 'arg string'] [--backend-help]
     [-f|--persist-file file] [-v|--verbose]
     [--stdout] [--no-fork]
+    [--ssl --ssl-cert /path/cert.pem --ssl-key /path/key.pem]
 
   Start Virtual Serial Port Concentrator. By default, vSPC listens on
   port %s for VMware virtual serial connections. Each new VM is

@@ -360,7 +360,9 @@ class TelnetServer(FixedTelnet):
         return not self.unacked
 
     def send_buffered(self, s = ''):
-        self.send_buffer += s
+        # self.write from Telnet uses send_all which isnt what we want, so
+        # we have to do the IAC doubling ourselves
+        self.send_buffer += s.replace(IAC, IAC+IAC)
         nbytes = self.sock.send(self.send_buffer)
         self.send_buffer = self.send_buffer[nbytes:]
         return len(self.send_buffer) > 0
@@ -394,7 +396,11 @@ class VMTelnetServer(TelnetServer):
         self.name = None
         self.uuid = None
 
+    def _generate_secret(self):
+        return os.urandom(4)
+
     def _send_vmware(self, s):
+        s = s.replace(IAC, IAC+IAC)
         self.sock.sendall(IAC + SB + VMWARE_EXT + s + IAC + SE)
 
     def _handle_known_options(self, data):
@@ -412,9 +418,8 @@ class VMTelnetServer(TelnetServer):
         else:
             self._send_vmware(WONT_PROXY)
 
-    def _handle_vmotion_begin(self, data):
-        # Can't include an IAC (0xFF) in the the cookie or it fails.
-        cookie = data + struct.pack("i", hash(self) & 0xFEFEFEFE)
+    def _handle_vmotion_begin(self, sequence):
+        cookie = sequence + self._generate_secret()
 
         if self.handler.handle_vmotion_begin(self, cookie):
             logging.info("vMotion initiated for %s: %s" % (self.name, hexdump(cookie)))

@@ -14,15 +14,15 @@
 
 # Copyright 2011 Isilon Systems LLC. All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without modification, are
-# permitted provided that the following conditions are met:
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
 #
-#    1. Redistributions of source code must retain the above copyright notice, this list of
-#       conditions and the following disclaimer.
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
 #
-#    2. Redistributions in binary form must reproduce the above copyright notice, this list
-#       of conditions and the following disclaimer in the documentation and/or other materials
-#       provided with the distribution.
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
 #
 # THIS SOFTWARE IS PROVIDED BY ISILON SYSTEMS LLC. ''AS IS'' AND ANY
 # EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -37,9 +37,9 @@
 # OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# The views and conclusions contained in the software and documentation are those of the
-# authors and should not be interpreted as representing official policies, either expressed
-# or implied, of <copyright holder>.
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing
+# official policies, either expressed or implied, of <copyright holder>.
 
 """
 vSPC.py - A Virtual Serial Port Concentrator for VMware
@@ -549,6 +549,73 @@ class Selector:
         while True:
             self.run_once()
 
+class Poller:
+    def __init__(self):
+        self.poller = select.poll()
+        self.read_handlers = {}
+        self.write_handlers = {}
+
+    def _setup_poll(self, fd):
+        mask = 0
+        if fd in self.read_handlers:
+            mask = mask | select.POLLIN
+        if fd in self.write_handlers:
+            mask = mask | select.POLLOUT
+        if fd:
+            self.poller.register(fd, mask)
+        else:
+            try:
+                self.poller.unregister(fd)
+            except KeyError:
+                pass
+        logging.debug("_setup_poll(%d), mask = %d" % (fd, mask))
+
+
+    def add_reader(self, stream, func):
+        fileno = stream.fileno()
+        self.read_handlers[fileno] = stream, func
+        self._setup_poll(fileno)
+
+    def del_reader(self, stream):
+        fileno = stream.fileno()
+        try:
+            del self.read_handlers[fileno]
+        except KeyError:
+            pass
+        self._setup_poll(fileno)
+
+    def add_writer(self, stream, func):
+        fileno = stream.fileno()
+        self.write_handlers[fileno] = stream, func
+        self._setup_poll(fileno)
+        logging.debug("add_writer(%d)" % fileno)
+
+    def del_writer(self, stream):
+        fileno = stream.fileno()
+        try:
+            del self.write_handlers[fileno]
+        except KeyError:
+            pass
+        self._setup_poll(fileno)
+
+    def del_all(self, stream):
+        self.del_reader(stream)
+        self.del_writer(stream)
+
+    def run_once(self, timeout = None):
+        filenos = self.poller.poll(timeout)
+        for fileno, mask in filenos:
+            if mask & select.POLLIN:
+                stream, func = self.read_handlers[fileno]
+                func(stream)
+            if mask & select.POLLOUT:
+                stream, func = self.write_handlers[fileno]
+                func(stream)
+
+    def run_forever(self):
+        while True:
+            self.run_once()
+
 class vSPCBackendMemory:
     ADMIN_THREADS = 4
     ADMIN_CONN_TIMEOUT = 0.2
@@ -747,7 +814,7 @@ class vSPCBackendFile(vSPCBackendMemory):
 
         return vms
 
-class vSPC(Selector, VMExtHandler):
+class vSPC(Poller, VMExtHandler):
     class Vm:
         def __init__(self, uuid = None, name = None, vts = None):
             self.vts = vts if vts else []
@@ -772,7 +839,7 @@ class vSPC(Selector, VMExtHandler):
     def __init__(self, proxy_iface, proxy_port, admin_iface, admin_port,
                  use_ssl, ssl_cert_file, ssl_key_file,
                  vm_port_start, vm_expire_time, backend):
-        Selector.__init__(self)
+        Poller.__init__(self)
 
         self.proxy_iface = proxy_iface
         self.proxy_port = proxy_port
@@ -875,6 +942,7 @@ class vSPC(Selector, VMExtHandler):
         self.vms[client.uuid].clients.remove(client)
         self.stamp_orphan(self.vms[client.uuid])
         self.del_all(client)
+        client.close()
 
     def new_client_data(self, client):
         neg_done = False

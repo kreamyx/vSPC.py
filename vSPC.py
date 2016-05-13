@@ -422,27 +422,33 @@ class VMTelnetServer(TelnetServer):
         cookie = sequence + self._generate_secret()
 
         if self.handler.handle_vmotion_begin(self, cookie):
-            logging.info("vMotion initiated for %s: %s" % (self.name, hexdump(cookie)))
+            logging.info("uuid %s:%s vMotion initiated, cookie %s" %
+                         (self.uuid, repr(self.name), hexdump(cookie)))
             self._send_vmware(VMOTION_GOAHEAD + cookie)
         else:
-            logging.info("vMotion denied for %s: %s" % (self.name, hexdump(cookie)))
+            logging.info("uuid %s:%s vMotion denied, cookie" %
+                         (self.uuid, repr(self.name), hexdump(cookie)))
             self._send_vmware(VMOTION_NOTNOW + cookie)
 
     def _handle_vmotion_peer(self, cookie):
         if self.handler.handle_vmotion_peer(self, cookie):
-            logging.info("vMotion peer: %s" % hexdump(cookie))
+            logging.info("uuid %s:%s vMotion peer, cookie %s" %
+                         (self.uuid, repr(self.name), hexdump(cookie)))
             self._send_vmware(VMOTION_PEER_OK + cookie)
         else:
             # There's no clear spec on rejecting this
-            logging.info("vMotion peer rejected: %s" % hexdump(cookie))
+            logging.info("uuid %s:%s vMotion peer rejected, cookie %s" %
+                         (self.uuid, repr(self.name), hexdump(cookie)))
             self._send_vmware(UNKNOWN_SUBOPTION_RCVD_2 + VMOTION_PEER)
 
     def _handle_vmotion_complete(self, data):
-        logging.info("vMotion complete for %s" % self.name)
+        logging.info("uuid %s:%s vMotion complete" %
+                     (self.uuid, repr(self.name)))
         self.handler.handle_vmotion_complete(self)
 
     def _handle_vmotion_abort(self, data):
-        logging.info("vMotion abort for %s" % self.name)
+        logging.info("uuid %s:%s vMotion abort" %
+                     (self.uuid, repr(self.name)))
         self.handler.handle_vmotion_abort(self)
 
     def _handle_vc_uuid(self, data):
@@ -871,26 +877,14 @@ class vSPC(Poller, VMExtHandler):
         vt = VMTelnetServer(sock, handler = self)
         self.add_reader(vt, self.new_vm_data)
 
-    def new_client_connection(self, vm):
-        sock = vm.listener.accept()[0]
-        sock.setblocking(0)
-        sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
-
-        client = self.Client(sock)
-        client.uuid = vm.uuid
-
-        self.add_reader(client, self.new_client_data)
-        vm.clients.append(client)
-
-        logging.info('uuid %s new client, %d active clients'
-                      % (client.uuid, len(vm.clients)))
-
     def abort_vm_connection(self, vt):
         if vt.uuid:
-            logging.info('uuid %s VM socket closed' % vt.uuid)
+            vm = self.vms[vt.uuid]
+            logging.info('uuid %s:%s VM vt socket closed, %d active vts' %
+                         (vm.uuid, vm.name, len(vm.vts)))
             try:
-                self.vms[vt.uuid].vts.remove(vt)
-                self.stamp_orphan(self.vms[vt.uuid])
+                vm.vts.remove(vt)
+                self.stamp_orphan(vm)
             except KeyError:
                 pass
         else:
@@ -934,11 +928,26 @@ class vSPC(Poller, VMExtHandler):
             except (EOFError, IOError, socket.error, ssl.SSLError), e:
                 logging.info('cl.socket send error: %s' % (str(e)))
 
+    def new_client_connection(self, vm):
+        sock = vm.listener.accept()[0]
+        sock.setblocking(0)
+        sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+
+        client = self.Client(sock)
+        client.uuid = vm.uuid
+
+        self.add_reader(client, self.new_client_data)
+        vm.clients.append(client)
+
+        logging.info('uuid %s:%s new client, %d active clients'
+                      % (vm.uuid, repr(vm.name), len(vm.clients)))
+
     def abort_client_connection(self, client):
-        logging.info('uuid %s client socket closed, %d active clients' %
-                      (client.uuid, len(self.vms[client.uuid].clients)-1))
-        self.vms[client.uuid].clients.remove(client)
-        self.stamp_orphan(self.vms[client.uuid])
+        vm = self.vms[client.uuid]
+        logging.info('uuid %s:%s client socket closed, %d active clients' %
+                      (vm.uuid, repr(vm.name), len(vm.clients)-1))
+        vm.clients.remove(client)
+        self.stamp_orphan(vm)
         self.del_all(client)
         client.close()
 
@@ -971,7 +980,9 @@ class vSPC(Poller, VMExtHandler):
             try:
                 self.send_buffered(vt, s)
             except (EOFError, IOError, socket.error, ssl.SSLError), e:
-                logging.info('cl.socket send error: %s' % (str(e)))
+                vm = self.vms[client.uuid]
+                logging.info('uuid %s:%s socket send error: %s' %
+                             vm.uuid, repr(vm.name), (str(e)))
 
     def new_vm(self, uuid, name, port = None, vts = None):
         vm = self.Vm(uuid = uuid, name = name, vts = vts)
@@ -983,7 +994,7 @@ class vSPC(Poller, VMExtHandler):
         if not port:
             self.backend.notify_vm(vm.uuid, vm.name, vm.port)
 
-        logging.info('%s:%s listening on port %d' % 
+        logging.info('uuid %s:%s listening on port %d' % 
                       (vm.uuid, repr(vm.name), vm.port))
 
         # The clock is always ticking
@@ -1009,8 +1020,8 @@ class vSPC(Poller, VMExtHandler):
         vm = self.vms[vt.uuid]
         vm.vts.append(vt)
 
-        logging.info('uuid %s VM reconnect, %d active' %
-                      (vm.uuid, len(vm.vts)))
+        logging.info("uuid %s:%s VM reconnect, %d active vts" %
+                     (vm.uuid, repr(vm.name), len(vm.vts)))
 
     def handle_vm_name(self, vt):
         if not self.vms.has_key(vt.uuid):
@@ -1059,13 +1070,11 @@ class vSPC(Poller, VMExtHandler):
         return True
 
     def handle_vmotion_complete(self, vt):
-        logging.info('uuid %s vmotion complete' % vt.uuid)
         vm = self.vms[vt.uuid]
         del self.vmotions[vm.vmotion]
         vm.vmotion = None
 
     def handle_vmotion_abort(self, vt):
-        logging.info('uuid %s vmotion abort' % vt.uuid)
         vm = self.vms[vt.uuid]
         if vm.vmotion:
             del self.vmotions[vm.vmotion]

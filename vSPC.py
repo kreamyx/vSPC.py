@@ -881,7 +881,7 @@ class vSPC(Poller, VMExtHandler):
         if vt.uuid:
             vm = self.vms[vt.uuid]
             logging.info('uuid %s:%s VM vt socket closed, %d active vts' %
-                         (vm.uuid, vm.name, len(vm.vts)-1))
+                         (vm.uuid, repr(vm.name), len(vm.vts)-1))
             try:
                 vm.vts.remove(vt)
                 self.stamp_orphan(vm)
@@ -939,8 +939,8 @@ class vSPC(Poller, VMExtHandler):
         self.add_reader(client, self.new_client_data)
         vm.clients.append(client)
 
-        logging.info('uuid %s:%s new client, %d active clients'
-                      % (vm.uuid, repr(vm.name), len(vm.clients)))
+        logging.info('uuid %s:%s new client, %d active clients' %
+                      (vm.uuid, repr(vm.name), len(vm.clients)))
 
     def abort_client_connection(self, client):
         vm = self.vms[client.uuid]

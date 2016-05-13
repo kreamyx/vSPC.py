@@ -606,7 +606,7 @@ class Poller:
         self.del_reader(stream)
         self.del_writer(stream)
 
-    def run_once(self, timeout = None):
+    def run_once(self, timeout = -1):
         filenos = self.poller.poll(timeout)
         for fileno, mask in filenos:
             if mask & select.POLLIN:

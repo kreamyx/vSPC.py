@@ -881,7 +881,7 @@ class vSPC(Poller, VMExtHandler):
         if vt.uuid:
             vm = self.vms[vt.uuid]
             logging.info('uuid %s:%s VM vt socket closed, %d active vts' %
-                         (vm.uuid, vm.name, len(vm.vts)))
+                         (vm.uuid, vm.name, len(vm.vts)-1))
             try:
                 vm.vts.remove(vt)
                 self.stamp_orphan(vm)

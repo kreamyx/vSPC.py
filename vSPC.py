@@ -568,8 +568,6 @@ class Poller:
                 self.poller.unregister(fd)
             except KeyError:
                 pass
-        logging.debug("_setup_poll(%d), mask = %d" % (fd, mask))
-
 
     def add_reader(self, stream, func):
         fileno = stream.fileno()

@@ -567,7 +567,7 @@ class Poller:
             mask = mask | select.POLLIN
         if fd in self.write_handlers:
             mask = mask | select.POLLOUT
-        if fd:
+        if mask:
             self.poller.register(fd, mask)
         else:
             try:

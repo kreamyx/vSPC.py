@@ -516,44 +516,6 @@ def openport(port, iface="", use_ssl=False, ssl_cert=None, ssl_key=None):
 	sock.listen(LISTEN_BACKLOG)
 	return sock
 
-class Selector:
-    def __init__(self):
-        self.read_handlers = {}
-        self.write_handlers = {}
-
-    def add_reader(self, stream, func):
-        self.read_handlers[stream] = func
-
-    def del_reader(self, stream):
-        try:
-            del self.read_handlers[stream]
-        except KeyError:
-            pass
-
-    def add_writer(self, stream, func):
-        self.write_handlers[stream] = func
-
-    def del_writer(self, stream):
-        try:
-            del self.write_handlers[stream]
-        except KeyError:
-            pass
-
-    def del_all(self, stream):
-        self.del_reader(stream)
-        self.del_writer(stream)
-
-    def run_once(self, timeout = None):
-        (readers, writers, exceptions) = \
-            select.select(self.read_handlers.keys(), self.write_handlers.keys(), [], timeout)
-        for reader in readers:
-            self.read_handlers[reader](reader)
-        for writer in writers:
-            self.write_handlers[writer](writer)
-
-    def run_forever(self):
-        while True:
-            self.run_once()
 
 class Poller:
     def __init__(self):

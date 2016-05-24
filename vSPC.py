@@ -818,7 +818,7 @@ class vSPCBackendFile(vSPCBackendMemory):
 
         return vms
 
-class vSPC(Poller, VMExtHandler):
+class vSPC(Selector, VMExtHandler):
     class Vm:
         def __init__(self, uuid = None, name = None, vts = None):
             self.vts = vts if vts else []

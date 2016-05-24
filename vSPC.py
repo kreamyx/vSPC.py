@@ -843,7 +843,7 @@ class vSPC(Selector, VMExtHandler):
     def __init__(self, proxy_iface, proxy_port, admin_iface, admin_port,
                  use_ssl, ssl_cert_file, ssl_key_file,
                  vm_port_start, vm_expire_time, backend):
-        Poller.__init__(self)
+        Selector.__init__(self)
 
         self.proxy_iface = proxy_iface
         self.proxy_port = proxy_port

@@ -561,24 +561,25 @@ class Poller:
         self.read_handlers = {}
         self.write_handlers = {}
 
-    def _setup_poll(self, fd):
+    def _setup_poll(self, stream):
+        fd = stream.fileno()
         mask = 0
         if fd in self.read_handlers:
             mask = mask | select.POLLIN
         if fd in self.write_handlers:
             mask = mask | select.POLLOUT
         if mask:
-            self.poller.register(fd, mask)
+            self.poller.register(stream, mask)
         else:
             try:
-                self.poller.unregister(fd)
+                self.poller.unregister(stream)
             except KeyError:
                 pass
 
     def add_reader(self, stream, func):
         fileno = stream.fileno()
         self.read_handlers[fileno] = stream, func
-        self._setup_poll(fileno)
+        self._setup_poll(stream)
 
     def del_reader(self, stream):
         fileno = stream.fileno()
@@ -586,12 +587,12 @@ class Poller:
             del self.read_handlers[fileno]
         except KeyError:
             pass
-        self._setup_poll(fileno)
+        self._setup_poll(stream)
 
     def add_writer(self, stream, func):
         fileno = stream.fileno()
         self.write_handlers[fileno] = stream, func
-        self._setup_poll(fileno)
+        self._setup_poll(stream)
         logging.debug("add_writer(%d)" % fileno)
 
     def del_writer(self, stream):
@@ -600,19 +601,19 @@ class Poller:
             del self.write_handlers[fileno]
         except KeyError:
             pass
-        self._setup_poll(fileno)
+        self._setup_poll(stream)
 
     def del_all(self, stream):
         self.del_reader(stream)
         self.del_writer(stream)
 
     def run_once(self, timeout = -1):
-        filenos = self.poller.poll(timeout)
-        for fileno, mask in filenos:
-            if mask & select.POLLIN:
+        events = self.poller.poll(timeout)
+        for (fileno, eventmask) in events:
+            if eventmask & (select.POLLIN | select.POLLERR | select.POLLHUP):
                 stream, func = self.read_handlers[fileno]
                 func(stream)
-            if mask & select.POLLOUT:
+            if eventmask & select.POLLOUT:
                 stream, func = self.write_handlers[fileno]
                 func(stream)
 
@@ -879,10 +880,10 @@ class vSPC(Selector, VMExtHandler):
 
     def abort_vm_connection(self, vt):
         if vt.uuid:
-            vm = self.vms[vt.uuid]
-            logging.info('uuid %s:%s VM vt socket closed, %d active vts' %
-                         (vm.uuid, repr(vm.name), len(vm.vts)-1))
             try:
+                vm = self.vms[vt.uuid]
+                logging.info('uuid %s:%s VM vt socket closed, %d active vts' %
+                             (vm.uuid, repr(vm.name), len(vm.vts)-1))
                 vm.vts.remove(vt)
                 self.stamp_orphan(vm)
             except KeyError:
@@ -929,7 +930,7 @@ class vSPC(Selector, VMExtHandler):
                 logging.info('cl.socket send error: %s' % (str(e)))
 
     def new_client_connection(self, vm):
-        sock = vm.listener.accept()[0]
+        sock, addr = vm.listener.accept()
         sock.setblocking(0)
         sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
 
@@ -939,8 +940,8 @@ class vSPC(Selector, VMExtHandler):
         self.add_reader(client, self.new_client_data)
         vm.clients.append(client)
 
-        logging.info('uuid %s:%s new client, %d active clients' %
-                      (vm.uuid, repr(vm.name), len(vm.clients)))
+        logging.info('uuid %s:%s new client %s:%s, %d active clients' %
+              (vm.uuid, repr(vm.name), addr[0], addr[1], len(vm.clients)))
 
     def abort_client_connection(self, client):
         vm = self.vms[client.uuid]

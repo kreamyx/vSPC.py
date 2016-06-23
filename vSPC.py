@@ -983,7 +983,7 @@ class vSPC(Selector, VMExtHandler):
             except (EOFError, IOError, socket.error, ssl.SSLError), e:
                 vm = self.vms[client.uuid]
                 logging.info('uuid %s:%s socket send error: %s' %
-                             vm.uuid, repr(vm.name), (str(e)))
+                             (vm.uuid, repr(vm.name), str(e)))
 
     def new_vm(self, uuid, name, port = None, vts = None):
         vm = self.Vm(uuid = uuid, name = name, vts = vts)
